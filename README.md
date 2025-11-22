@@ -79,4 +79,4 @@ Ultrasonic TRIG -> D7 (GPIO13)
 Ultrasonic ECHO -> D8 (GPIO15)
 
 LCD I2C   -> SDA = D2, SCL = D1
-![Circuit  Diagram](images/Circuit_diagram.jpeg)
+![Circuit  Diagram](Images/Circuit_diagram.jpeg)
