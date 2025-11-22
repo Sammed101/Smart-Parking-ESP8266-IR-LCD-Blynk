@@ -1,1 +1,185 @@
+#define BLYNK_TEMPLATE_ID   "YOUR_TEMPLATE_ID"      // Put this FIRST. Unless you enjoy spending 6 hours debugging absolutely nothing.
+#define BLYNK_TEMPLATE_NAME "YOUR_TEMPLATE_NAME"    //update this
+#define BLYNK_AUTH_TOKEN    "YOUR_AUTH_TOKEN"       //update this 
 
+char ssid[] = "YOUR_WIFI_SSID";        //update this 
+char pass[] = "YOUR_WIFI_PASSWORD";     //update this 
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+#include <BlynkSimpleEsp8266.h>
+#include <ESP8266WiFi.h> // Include WiFi library
+
+#define IR1 14  // IR sensor 1 (D5) - Entrance
+#define IR2 12  // IR sensor 2 (D6) - Exit
+#define SERVO_PIN 2  // Servo motor (D4)
+
+// Ultrasonic Sensor Pins
+#define TRIG 13  // D7
+#define ECHO 15  // D8
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+Servo gateServo;
+
+int totalSlots = 5; 
+int availableSlots = 5; 
+
+// Virtual Pin for Gate Status
+#define GATE_STATUS_PIN V4
+
+void setup() {
+    Serial.begin(115200);
+    Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+    pinMode(IR1, INPUT);
+    pinMode(IR2, INPUT);
+    pinMode(TRIG, OUTPUT);
+    pinMode(ECHO, INPUT);
+
+    gateServo.attach(SERVO_PIN);
+    gateServo.write(0); // Gate closed initially
+
+    Wire.begin(D2, D1);
+    lcd.begin(16, 2);
+    lcd.backlight();
+    updateLCD();
+}
+
+void loop() {
+    // Check Wi-Fi connection
+    if (WiFi.status() == WL_CONNECTED) {
+        Blynk.run(); // Run Blynk only if Wi-Fi is connected
+    } else {
+        Serial.println("Wi-Fi disconnected. Running in offline mode.");
+        attemptWiFiReconnect(); // Attempt to reconnect to Wi-Fi
+    }
+
+    checkParking(); // Always check parking, regardless of Wi-Fi status
+    checkDustbinLevel(); // Always check dustbin level, regardless of Wi-Fi status
+}
+
+void checkParking() {
+    int sensor1 = digitalRead(IR1);
+    int sensor2 = digitalRead(IR2);
+
+    if (sensor1 == LOW) {
+        Serial.println("Vehicle at Entrance...");
+        if (availableSlots > 0) {
+            openGate(); // Open the gate
+            updateLCD(); // Update LCD immediately after opening the gate
+            while (digitalRead(IR2) == HIGH) { delay(10); } // Wait for the vehicle to enter
+            delay(500);
+            Serial.println("Vehicle Entered, Closing Gate.");
+            closeGate(); // Close the gate
+            availableSlots--; // Decrease available slots
+            updateLCD(); // Update LCD immediately after closing the gate
+            if (WiFi.status() == WL_CONNECTED) {
+                Blynk.virtualWrite(V0, availableSlots); // Update Blynk app only if connected
+            }
+        } else {
+            Serial.println("🚫 Parking Full! Cannot Enter.");
+            updateLCD(); // Update LCD to show parking full message
+            delay(2000);
+        }
+    }
+
+    if (sensor2 == LOW) {
+        Serial.println("Vehicle at Exit...");
+        openGate(); // Open the gate
+        updateLCD(); // Update LCD immediately after opening the gate
+        while (digitalRead(IR1) == HIGH) { delay(10); } // Wait for the vehicle to exit
+        delay(500);
+        Serial.println("Vehicle Exited, Closing Gate.");
+        closeGate(); // Close the gate
+        availableSlots++; // Increase available slots
+        updateLCD(); // Update LCD immediately after closing the gate
+        if (WiFi.status() == WL_CONNECTED) {
+            Blynk.virtualWrite(V0, availableSlots); // Update Blynk app only if connected
+        }
+    }
+}
+
+void openGate() {
+    gateServo.write(90); // Open the gate
+    Serial.println("🟢 Gate Opening...");
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        Blynk.virtualWrite(GATE_STATUS_PIN, "Gate Opening!🟢"); // Update Blynk app only if connected
+    }
+    
+    delay(500); // Wait for the gate to open
+}
+
+void closeGate() {
+    gateServo.write(0); // Close the gate
+    Serial.println("🔴 Gate Closing...");
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        Blynk.virtualWrite(GATE_STATUS_PIN, "Gate Closed!🔴"); // Update Blynk app only if connected
+    }
+    
+    delay(500); // Wait for the gate to close
+}
+
+void updateLCD() {
+    lcd.clear(); // Clear the LCD display
+
+    if (availableSlots == 0) {
+        // Display parking full message
+        lcd.setCursor(0, 0); // Set cursor to the first row
+        lcd.print("Parking Full! :(");
+        lcd.setCursor(0, 1); // Set cursor to the second row
+        lcd.print("No Entry. Wait.");
+    } else {
+        // Display gate status and available slots
+        lcd.setCursor(0, 0); // Set cursor to the first row
+        if (gateServo.read() == 90) { // Gate is open
+            lcd.print("Gate Open ->");
+        } else { // Gate is closed
+            lcd.print("Gate Closed. X");
+        }
+
+        lcd.setCursor(0, 1); // Set cursor to the second row
+        lcd.print("Slots: ");
+        lcd.print(availableSlots);
+    }
+}
+
+void attemptWiFiReconnect() {
+    static unsigned long lastAttempt = 0;
+    if (millis() - lastAttempt > 10000) { // Attempt to reconnect every 10 seconds
+        Serial.println("Attempting to reconnect to Wi-Fi...");
+        WiFi.begin(ssid, pass);
+        lastAttempt = millis();
+    }
+}
+
+// 🔹 Check Dustbin Level
+void checkDustbinLevel() {
+    long duration;
+    int distance;
+    
+    digitalWrite(TRIG, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG, LOW);
+    
+    duration = pulseIn(ECHO, HIGH);
+    distance = duration * 0.034 / 2;
+
+    int fullness = map(distance, 2 , 20 , 100, 0); // 5cm = Full, 30cm = Empty
+    fullness = constrain(fullness, 0, 100);
+
+    if (WiFi.status() == WL_CONNECTED) {
+        Blynk.virtualWrite(V2, fullness); // Update Blynk app only if connected
+        if (fullness >= 80) {
+            Blynk.virtualWrite(V3, 1); // Send command to Blynk when dustbin is full
+        } else {
+            Blynk.virtualWrite(V3, 0);
+        }
+    }
+
+    delay(2000);
+}
