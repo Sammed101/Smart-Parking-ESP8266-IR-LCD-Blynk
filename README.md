@@ -79,4 +79,4 @@ Ultrasonic TRIG -> D7 (GPIO13)
 Ultrasonic ECHO -> D8 (GPIO15)
 
 LCD I2C   -> SDA = D2, SCL = D1
-![Circuit Diagram ](https://github.com/Sammed101/Smart-Parking-ESP8266-IR-LCD-Blynk/blob/main/Circuit%20Diagram.jpeg)
+![Circuit  Diagram](images/Circuit_diagram.jpeg)
