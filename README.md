@@ -39,6 +39,12 @@ The system only opens the gate if parking slots are available and shows the curr
 - Sends dustbin level to Blynk app
 - Triggers an alert in Blynk when dustbin is ≥ 80% full
 
+###🔁 System Flowchart
+
+<p align="center">
+  <img src="Images/Flowchart.png" width="500">
+</p>
+
 ### Connectivity & Offline Mode
 
 - Uses **Blynk** for:
